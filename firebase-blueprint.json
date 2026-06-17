@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "TenantFacility": {
+      "title": "Tenant Facility",
+      "description": "A healthcare facility tenant within the system.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "type": { "type": "string", "enum": ["Regional Hospital", "General Hospital", "Primary Hospital", "Health Center", "Health Post"] },
+        "licenseNo": { "type": "string" },
+        "region": { "type": "string" },
+        "zone": { "type": "string" },
+        "woreda": { "type": "string" },
+        "kebele": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "pending", "submitted", "under_review", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "patientsWaiting": { "type": "number" },
+        "estimatedWaitMinutes": { "type": "number" }
+      },
+      "required": ["id", "name", "code", "licenseNo", "status"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Medical personnel or staff working at a facility.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "facilityId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "gender": { "type": "string", "enum": ["Male", "Female"] },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "profession": { "type": "string" },
+        "department": { "type": "string" },
+        "position": { "type": "string" },
+        "salary": { "type": "number" },
+        "status": { "type": "string", "enum": ["Active", "On Leave", "Suspended", "Resigned"] }
+      },
+      "required": ["id", "facilityId", "fullName", "profession", "status"]
+    },
+    "AttendanceLog": {
+      "title": "Attendance Log",
+      "description": "Shift clocking records with GPS metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date": { "type": "string" },
+        "checkIn": { "type": "string" },
+        "checkOut": { "type": "string" },
+        "status": { "type": "string", "enum": ["Present", "Late", "Absent", "Excused"] },
+        "method": { "type": "string" },
+        "gpsVerified": { "type": "boolean" },
+        "overtimeHours": { "type": "number" }
+      },
+      "required": ["id", "employeeId", "date", "status"]
+    },
+    "FeedbackItem": {
+      "title": "Feedback Item",
+      "description": "Opinions, citizen suggestions, or complaint tickets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "facilityId": { "type": "string" },
+        "facilityName": { "type": "string" },
+        "citizenName": { "type": "string" },
+        "type": { "type": "string", "enum": ["Complaint", "Suggestion"] },
+        "subject": { "type": "string" },
+        "details": { "type": "string" },
+        "rating": { "type": "number" },
+        "status": { "type": "string", "enum": ["Submitted", "In Review", "Resolved"] }
+      },
+      "required": ["id", "facilityId", "details", "status"]
+    },
+    "SystemUser": {
+      "title": "System User",
+      "description": "An administrative or clinical system user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "facility_admin", "staff", "public"] },
+        "facilityId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Suspended"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "fullName", "role", "status"]
+    }
+  },
+  "firestore": {
+    "/facilities/{facilityId}": {
+      "schema": "TenantFacility",
+      "description": "Central healthcare facilities directory."
+    },
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Medical and administrative personnel directory."
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "AttendanceLog",
+      "description": "Shift attendance log records."
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "FeedbackItem",
+      "description": "Citizen complaints and general feedback inputs."
+    },
+    "/users/{userId}": {
+      "schema": "SystemUser",
+      "description": "Registered system accounts with access controls."
+    }
+  }
+}

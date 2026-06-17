@@ -1,0 +1,6 @@
+{
+  "name": "MUSTALI DIRS",
+  "description": "An Enterprise Health Information and Resource Management System for multi-tenant health facilities, featuring HRMS, attendance, payroll, inventory, offline synchronization, and community exchange in English and Afaan Oromo.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

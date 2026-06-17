@@ -1,0 +1,228 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny-All Catch-All Security Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // GLOBAL SECURITY HELPERS & PRIMITIVES
+    // ==========================================
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+
+    // Verify if current user email is verified (if email-based auth is active)
+    function isVerifiedUser() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    // Check if the authenticated user matches an admin document
+    function isCentralAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'mustali03m@gmail.com'
+      );
+    }
+
+    // ==========================================
+    // ENTITY 1: Tenant Facilities Database
+    // ==========================================
+    
+    function isValidFacility(data) {
+      return data.keys().hasAll(['id', 'name', 'code', 'licenseNo', 'status'])
+        && data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 200
+        && data.code is string && data.code.size() <= 100
+        && data.licenseNo is string && data.licenseNo.size() <= 100
+        && data.status in ['draft', 'pending', 'submitted', 'under_review', 'approved', 'rejected'];
+    }
+
+    match /facilities/{facilityId} {
+      allow read: if true;
+      
+      allow create, update: if isValidId(facilityId) && isValidFacility(incoming());
+        
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITY 2: Employees / Healthcare Personnel
+    // ==========================================
+    
+    function isValidEmployee(data) {
+      return data.keys().hasAll(['id', 'facilityId', 'fullName', 'profession', 'status'])
+        && data.id is string && data.id.size() <= 64
+        && data.facilityId is string && data.facilityId.size() <= 64
+        && data.fullName is string && data.fullName.size() <= 150
+        && data.profession is string && data.profession.size() <= 150
+        && data.status in ['Active', 'On Leave', 'Suspended', 'Resigned'];
+    }
+
+    match /employees/{employeeId} {
+      allow get, list: if true; // Staff directory required for verification and sync
+      allow create, update: if isValidId(employeeId) && isValidEmployee(incoming());
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITIES: staff, trainingRecords, performanceEvaluations
+    // ==========================================
+
+    match /staff/{staffId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(staffId) && isValidEmployee(incoming());
+      allow delete: if isCentralAdmin();
+    }
+
+    match /trainingRecords/{recordId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(recordId);
+      allow delete: if isCentralAdmin();
+    }
+
+    match /performanceEvaluations/{evalId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(evalId);
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITY 3: Attendance GPS Logs
+    // ==========================================
+    
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['id', 'employeeId', 'date', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.employeeId is string && data.employeeId.size() <= 64
+        && data.date is string && data.date.size() <= 20
+        && data.status in ['Present', 'Late', 'Absent', 'Excused'];
+    }
+
+    match /attendance/{attendanceId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(attendanceId) && isValidAttendance(incoming());
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITY 4: Feedback Logs (Citizen Interface)
+    // ==========================================
+    
+    function isValidFeedback(data) {
+      return data.keys().hasAll(['id', 'facilityId', 'details', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.facilityId is string && data.facilityId.size() <= 64
+        && data.details is string && data.details.size() <= 5000
+        && data.status in ['Submitted', 'In Review', 'Resolved'];
+    }
+
+    match /feedback/{feedbackId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(feedbackId) && isValidFeedback(incoming());
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // TEST CONNECTION GATES
+    // ==========================================
+    
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // ==========================================
+    // ENTITY 5: Users Accounts Directory
+    // ==========================================
+    
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email', 'fullName', 'role', 'status'])
+        && data.id is string && data.id.size() <= 64
+        && data.email is string && data.email.size() <= 150
+        && data.fullName is string && data.fullName.size() <= 150
+        && data.role in ['super_admin', 'facility_admin', 'staff', 'public']
+        && data.status in ['Active', 'Suspended'];
+    }
+
+    match /users/{userId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(userId) && isValidUser(incoming());
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITY 6: Medical Equipment
+    // ==========================================
+
+    match /equipment/{eqId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(eqId);
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITY 7: Corporate Custodian Assets
+    // ==========================================
+
+    match /assets/{assetId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(assetId);
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITY 8: Certified Ledger Payroll Slips
+    // ==========================================
+    
+    function isValidPayrollSlip(data) {
+      return data.keys().hasAll(['id', 'employeeId', 'employeeName', 'facilityId', 'month', 'netSalary', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.employeeId is string && data.employeeId.size() <= 64
+        && data.employeeName is string && data.employeeName.size() <= 150
+        && data.facilityId is string && data.facilityId.size() <= 64
+        && data.month is string && data.month.size() <= 32
+        && data.status in ['Draft', 'Under Review', 'Approved', 'Paid'];
+    }
+
+    match /payrollSlips/{slipId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(slipId) && isValidPayrollSlip(incoming());
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // COMPONENT: System Announcements
+    // ==========================================
+    
+    match /announcements/{announcementId} {
+      allow get, list: if true;
+      allow create, update, delete: if true; // Facilitates distributed crisis reports & community warning triggers
+    }
+
+    // ==========================================
+    // COMPONENT: Audit Logs Security Trail
+    // ==========================================
+    
+    match /auditLogs/{logId} {
+      allow get, list: if true;
+      allow create: if isValidId(logId);
+      allow update, delete: if false; // Audit logs must be immutable
+    }
+  }
+}
