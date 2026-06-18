@@ -135,14 +135,30 @@ export default function App() {
         const facSnap = await getDocs(collection(db, 'facilities')).catch(err => handleFirestoreError(err, OperationType.GET, 'facilities'));
         if (facSnap.empty) {
           addNotificationLog("[Firebase] Seeding initial central facilities information...");
+          const seeded: TenantFacility[] = [];
           for (const f of initialFacilities) {
-            await setDoc(doc(db, 'facilities', f.id), f).catch(err => handleFirestoreError(err, OperationType.WRITE, `facilities/${f.id}`));
+            const baselineStatus = f.status || 'approved';
+            const normalized: TenantFacility = {
+              ...f,
+              status: baselineStatus,
+              permitStatus: f.permitStatus || baselineStatus,
+              approvalStatus: f.approvalStatus || baselineStatus,
+              onboardingStatus: f.onboardingStatus || baselineStatus
+            };
+            await setDoc(doc(db, 'facilities', f.id), normalized).catch(err => handleFirestoreError(err, OperationType.WRITE, `facilities/${f.id}`));
+            seeded.push(normalized);
           }
-          setFacilities(initialFacilities);
+          setFacilities(seeded);
         } else {
           const list: TenantFacility[] = [];
           facSnap.forEach(docSnap => {
-            list.push(docSnap.data() as TenantFacility);
+            const data = docSnap.data() as TenantFacility;
+            const baselineStatus = data.status || 'pending';
+            data.status = baselineStatus;
+            data.permitStatus = data.permitStatus || baselineStatus;
+            data.approvalStatus = data.approvalStatus || baselineStatus;
+            data.onboardingStatus = data.onboardingStatus || baselineStatus;
+            list.push(data);
           });
           list.sort((a, b) => a.id.localeCompare(b.id));
           setFacilities(list);
@@ -587,7 +603,14 @@ export default function App() {
     setFacilities(prev => {
       const updated = prev.map(f => {
         if (f.id === id) {
-          targetFac = { ...f, status: 'approved', code: `${f.type.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}` };
+          targetFac = { 
+            ...f, 
+            status: 'approved',
+            permitStatus: 'approved',
+            approvalStatus: 'approved',
+            onboardingStatus: 'approved',
+            code: f.code || `${f.type.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}` 
+          };
           return targetFac;
         }
         return f;
@@ -632,7 +655,13 @@ export default function App() {
     setFacilities(prev => {
       const updated = prev.map(f => {
         if (f.id === id) {
-          targetFac = { ...f, status: 'rejected' };
+          targetFac = { 
+            ...f, 
+            status: 'rejected',
+            permitStatus: 'rejected',
+            approvalStatus: 'rejected',
+            onboardingStatus: 'rejected'
+          };
           return targetFac;
         }
         return f;
@@ -672,39 +701,77 @@ export default function App() {
   };
 
   const handleAddNewFacility = (newFac: TenantFacility) => {
+    // Synchronize all status fields on registration
+    const initialStatus = newFac.status || 'pending';
+    const normalizedFac: TenantFacility = {
+      ...newFac,
+      status: initialStatus,
+      permitStatus: initialStatus,
+      approvalStatus: initialStatus,
+      onboardingStatus: initialStatus
+    };
     setFacilities(prev => {
-      const updated = [...prev, newFac];
+      const updated = [...prev, normalizedFac];
       if (!isOffline) {
-        setDoc(doc(db, 'facilities', newFac.id), newFac)
-          .catch(err => handleFirestoreError(err, OperationType.CREATE, `facilities/${newFac.id}`));
+        setDoc(doc(db, 'facilities', normalizedFac.id), normalizedFac)
+          .catch(err => handleFirestoreError(err, OperationType.CREATE, `facilities/${normalizedFac.id}`));
       }
       return updated;
     });
   };
 
   const handleUpdateFacilityStatus = (id: string, newStatus: 'draft' | 'pending' | 'submitted' | 'under_review' | 'approved' | 'rejected') => {
+    let targetFac: TenantFacility | undefined;
     setFacilities(prev => {
       const updated = prev.map(f => {
         if (f.id === id) {
-          const u = { ...f, status: newStatus as any };
+          targetFac = { 
+            ...f, 
+            status: newStatus as any,
+            permitStatus: newStatus,
+            approvalStatus: newStatus,
+            onboardingStatus: newStatus
+          };
           if (newStatus === 'approved') {
-            u.code = f.code || `${f.type.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+            targetFac.code = f.code || `${f.type.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
           }
-          return u;
+          return targetFac;
         }
         return f;
       });
-      if (!isOffline) {
-        const targetFac = updated.find(f => f.id === id);
-        if (targetFac) {
-          setDoc(doc(db, 'facilities', id), targetFac)
-            .catch(err => handleFirestoreError(err, OperationType.UPDATE, `facilities/${id}`));
-        }
+      if (!isOffline && targetFac) {
+        setDoc(doc(db, 'facilities', id), targetFac)
+          .catch(err => handleFirestoreError(err, OperationType.UPDATE, `facilities/${id}`));
       }
       return updated;
     });
 
     if (newStatus === 'approved') {
+      // Activating user accounts tied to the approved facility
+      setUsers(prev => {
+        const updatedUsers = prev.map(u => {
+          if (u.facilityId === id) {
+            const updatedUser: SystemUser = { ...u, status: 'Active' };
+            if (!isOffline) {
+              setDoc(doc(db, 'users', u.id), updatedUser)
+                .catch(err => handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`));
+            }
+            return updatedUser;
+          }
+          return u;
+        });
+        return updatedUsers;
+      });
+
+      // Send email notification log
+      setTimeout(() => {
+        const fac = facilities.find(f => f.id === id) || targetFac;
+        if (fac) {
+          const destEmail = fac.adminEmail || fac.email;
+          addNotificationLog(`[EMAIL SENT] To: ${destEmail} | SUBJECT: Onboarding status: Approved | Message: Congratulations! Your MUSTALI DIRS registration for ${fac.name} has been approved. Your Admin account "${destEmail}" is now active and can sign in.`);
+        }
+      }, 200);
+
       const activeF = facilities.find(f => f.id === id);
       const hasEmp = employees.some(e => e.facilityId === id);
       if (!hasEmp) {

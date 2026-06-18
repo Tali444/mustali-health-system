@@ -580,7 +580,7 @@ export default function DashboardFacilityAdmin({
               onChange={(e) => setSelectedFacilityId(e.target.value)}
               className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-cyan-300 outline-none"
             >
-              {facilities.filter(f => f.status === 'approved').map(fac => (
+              {facilities.filter(f => (f.status || '').toLowerCase() === 'approved').map(fac => (
                 <option key={fac.id} value={fac.id}>{fac.name}</option>
               ))}
             </select>

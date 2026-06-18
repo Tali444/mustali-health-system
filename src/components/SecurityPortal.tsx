@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserRole, TenantFacility, SystemUser } from '../types';
 import { Shield, Key, Building2, User, Landmark, Send, Check, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
@@ -19,13 +19,32 @@ export default function SecurityPortal({
 }: SecurityPortalProps) {
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'citizen_register'>('login');
   
+  // Computed approved facilities
+  const approvedFacilities = facilities.filter(f => {
+    const statusVal = (f.status || '').toLowerCase();
+    const permitVal = (f.permitStatus || '').toLowerCase();
+    const approvalVal = (f.approvalStatus || '').toLowerCase();
+    const onboardingVal = (f.onboardingStatus || '').toLowerCase();
+    return statusVal === 'approved' || 
+           permitVal === 'approved' || 
+           approvalVal === 'approved' || 
+           onboardingVal === 'approved';
+  });
+
   // Login states
   const [selectedRole, setSelectedRole] = useState<UserRole>('public');
-  const [selectedFacility, setSelectedFacility] = useState<string>(facilities[0]?.id || 'F-101');
+  const [selectedFacility, setSelectedFacility] = useState<string>('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Sync selectedFacility with approvedFacilities
+  useEffect(() => {
+    if (approvedFacilities.length > 0 && !approvedFacilities.some(f => f.id === selectedFacility)) {
+      setSelectedFacility(approvedFacilities[0].id);
+    }
+  }, [approvedFacilities, selectedFacility]);
 
   // Register facility states
   const [adminFullName, setAdminFullName] = useState('');
@@ -87,16 +106,36 @@ export default function SecurityPortal({
       }
 
       // Check the facility's registration status
-      if (fac.status === 'pending' || fac.status === 'Pending Approval') {
+      const statusLower = (fac.status || '').toLowerCase();
+      const permitLower = (fac.permitStatus || '').toLowerCase();
+      const approvalLower = (fac.approvalStatus || '').toLowerCase();
+      const onboardingLower = (fac.onboardingStatus || '').toLowerCase();
+
+      const isApproved = statusLower === 'approved' || 
+                         permitLower === 'approved' ||
+                         approvalLower === 'approved' ||
+                         onboardingLower === 'approved';
+
+      const isRejected = statusLower === 'rejected' || 
+                         permitLower === 'rejected' ||
+                         approvalLower === 'rejected' ||
+                         onboardingLower === 'rejected';
+
+      const isSuspended = statusLower === 'suspended' || 
+                          permitLower === 'suspended' ||
+                          approvalLower === 'suspended' ||
+                          onboardingLower === 'suspended';
+
+      if (!isApproved) {
+        if (isRejected) {
+          setErrorMsg('Access Denied: Your facility registration request has been Rejected. Access is prohibited.');
+          return;
+        }
+        if (isSuspended) {
+          setErrorMsg('Access Denied: Your facility access is Suspended. Please contact system support.');
+          return;
+        }
         setErrorMsg('Access Denied: Your facility onboarding request is currently Pending Approval by the Super Admin.');
-        return;
-      }
-      if (fac.status === 'rejected' || fac.status === 'Rejected') {
-        setErrorMsg('Access Denied: Your facility registration request has been Rejected. Access is prohibited.');
-        return;
-      }
-      if (fac.status === 'Suspended' || (fac.status as any) === 'suspended') {
-        setErrorMsg('Access Denied: Your facility access is Suspended. Please contact system support.');
         return;
       }
 
@@ -339,7 +378,7 @@ export default function SecurityPortal({
                   onChange={(e) => setSelectedFacility(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-500"
                 >
-                  {facilities.map(f => (
+                  {approvedFacilities.map(f => (
                     <option key={f.id} value={f.id}>
                       {f.name} ({f.id}) — {f.status.toUpperCase()}
                     </option>

@@ -21,6 +21,9 @@ export interface TenantFacility {
   phone: string;
   email: string;
   status: 'draft' | 'pending' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'Pending Approval' | 'Approved' | 'Active' | 'Rejected' | 'Suspended';
+  permitStatus?: string;
+  approvalStatus?: string;
+  onboardingStatus?: string;
   createdAt: string;
   patientsWaiting: number;
   estimatedWaitMinutes: number;

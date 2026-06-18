@@ -51,11 +51,11 @@ service cloud.firestore {
         && data.name is string && data.name.size() <= 200
         && data.code is string && data.code.size() <= 100
         && data.licenseNo is string && data.licenseNo.size() <= 100
-        && data.status in ['draft', 'pending', 'submitted', 'under_review', 'approved', 'rejected'];
+        && data.status in ['draft', 'pending', 'submitted', 'under_review', 'approved', 'rejected', 'Pending Approval', 'Approved', 'Active', 'Rejected', 'Suspended', 'suspended'];
     }
 
     match /facilities/{facilityId} {
-      allow read: if true;
+      allow get, list: if true;
       
       allow create, update: if isValidId(facilityId) && isValidFacility(incoming());
         
@@ -144,7 +144,7 @@ service cloud.firestore {
     // ==========================================
     
     match /test/{docId} {
-      allow read: if true;
+      allow get, list: if true;
     }
 
     // ==========================================
@@ -156,8 +156,8 @@ service cloud.firestore {
         && data.id is string && data.id.size() <= 64
         && data.email is string && data.email.size() <= 150
         && data.fullName is string && data.fullName.size() <= 150
-        && data.role in ['super_admin', 'facility_admin', 'staff', 'public']
-        && data.status in ['Active', 'Suspended'];
+        && data.role in ['super_admin', 'facility_admin', 'hr_officer', 'equipment_officer', 'staff', 'public']
+        && data.status in ['Active', 'Suspended', 'Pending Approval', 'Approved', 'Rejected'];
     }
 
     match /users/{userId} {
@@ -183,6 +183,16 @@ service cloud.firestore {
     match /assets/{assetId} {
       allow get, list: if true;
       allow create, update: if isValidId(assetId);
+      allow delete: if isCentralAdmin();
+    }
+
+    // ==========================================
+    // ENTITY: Vaccine Stock and Cold Chain Logs
+    // ==========================================
+
+    match /vaccines/{vacId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(vacId);
       allow delete: if isCentralAdmin();
     }
 
