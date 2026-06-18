@@ -48,6 +48,62 @@ import SecurityPortal from './components/SecurityPortal';
 import AndroidSimulator from './components/AndroidSimulator';
 
 import UserManagement from './components/UserManagement';
+
+function normalizeAndSyncFacility(raw: any, docId?: string): TenantFacility {
+  const f = { ...raw };
+  
+  // 1. Resolve facility ID (facilityId vs id vs docId)
+  if (!f.id && f.facilityId) {
+    f.id = f.facilityId;
+  }
+  if (!f.id && docId) {
+    f.id = docId;
+  }
+  if (!f.facilityId && f.id) {
+    f.facilityId = f.id;
+  }
+  
+  // 2. Resolve facility Type (facilityType vs type)
+  if (!f.type && f.facilityType) {
+    f.type = f.facilityType;
+  }
+  if (!f.facilityType && f.type) {
+    f.facilityType = f.type;
+  }
+
+  // 3. Fallbacks
+  if (!f.name) f.name = "Unknown Facility";
+  if (!f.code) f.code = "FAC-" + f.id;
+  if (!f.licenseNo) f.licenseNo = "LIC-" + f.id;
+  
+  // 4. Case-insensitive search inside any status fields for approval
+  const statusStr = (f.status || '').toLowerCase();
+  const permitStr = (f.permitStatus || '').toLowerCase();
+  const approvalStr = (f.approvalStatus || '').toLowerCase();
+  const onboardingStr = (f.onboardingStatus || '').toLowerCase();
+  
+  const isApproved = 
+    statusStr === 'approved' || statusStr === 'active' ||
+    permitStr === 'approved' || permitStr === 'active' ||
+    approvalStr === 'approved' || approvalStr === 'active' ||
+    onboardingStr === 'approved' || onboardingStr === 'active';
+    
+  if (isApproved) {
+    f.status = 'approved';
+    f.permitStatus = 'approved';
+    f.approvalStatus = 'approved';
+    f.onboardingStatus = 'approved';
+  } else {
+    // Standard synchronize fallback
+    const baselineStatus = f.status || 'pending';
+    f.status = baselineStatus;
+    f.permitStatus = f.permitStatus || baselineStatus;
+    f.approvalStatus = f.approvalStatus || baselineStatus;
+    f.onboardingStatus = f.onboardingStatus || baselineStatus;
+  }
+  
+  return f as TenantFacility;
+}
 import SystemStatistics from './components/SystemStatistics';
 import ReportsDashboard from './components/ReportsDashboard';
 import SettingsPage from './components/SettingsPage';
@@ -137,14 +193,7 @@ export default function App() {
           addNotificationLog("[Firebase] Seeding initial central facilities information...");
           const seeded: TenantFacility[] = [];
           for (const f of initialFacilities) {
-            const baselineStatus = f.status || 'approved';
-            const normalized: TenantFacility = {
-              ...f,
-              status: baselineStatus,
-              permitStatus: f.permitStatus || baselineStatus,
-              approvalStatus: f.approvalStatus || baselineStatus,
-              onboardingStatus: f.onboardingStatus || baselineStatus
-            };
+            const normalized = normalizeAndSyncFacility(f, f.id);
             await setDoc(doc(db, 'facilities', f.id), normalized).catch(err => handleFirestoreError(err, OperationType.WRITE, `facilities/${f.id}`));
             seeded.push(normalized);
           }
@@ -152,13 +201,40 @@ export default function App() {
         } else {
           const list: TenantFacility[] = [];
           facSnap.forEach(docSnap => {
-            const data = docSnap.data() as TenantFacility;
-            const baselineStatus = data.status || 'pending';
-            data.status = baselineStatus;
-            data.permitStatus = data.permitStatus || baselineStatus;
-            data.approvalStatus = data.approvalStatus || baselineStatus;
-            data.onboardingStatus = data.onboardingStatus || baselineStatus;
-            list.push(data);
+            const rawData = docSnap.data();
+            const normalized = normalizeAndSyncFacility(rawData, docSnap.id);
+            
+            // Check if F-107 or Yayo facility is being loaded
+            if (docSnap.id === 'F-107' || normalized.id === 'F-107' || (normalized.name && normalized.name.toLowerCase().includes('yayo'))) {
+              addNotificationLog(`[Trace F-107] Loaded F-107: ${normalized.name} | id: ${normalized.id} | docId: ${docSnap.id}`);
+              addNotificationLog(`[Trace F-107] Normalized statuses: status=${normalized.status}, permitStatus=${normalized.permitStatus}, approvalStatus=${normalized.approvalStatus}, onboardingStatus=${normalized.onboardingStatus}`);
+              
+              // If F-107 is detected, and any fields were out-of-sync in the database, write back the clean record
+              const rawStatus = (rawData.status || '').toLowerCase();
+              const rawPermit = (rawData.permitStatus || '').toLowerCase();
+              const rawApproval = (rawData.approvalStatus || '').toLowerCase();
+              const rawOnboarding = (rawData.onboardingStatus || '').toLowerCase();
+              const isDatabaseOutOfSync = 
+                rawStatus !== normalized.status ||
+                rawPermit !== normalized.permitStatus ||
+                rawApproval !== normalized.approvalStatus ||
+                rawOnboarding !== normalized.onboardingStatus ||
+                !rawData.id ||
+                !rawData.type;
+                
+              if (isDatabaseOutOfSync) {
+                addNotificationLog(`[Trace F-107] Mismatch detected in Firestore database. Synchronizing all approval and mapping fields recursively...`);
+                setDoc(doc(db, 'facilities', normalized.id), normalized)
+                  .then(() => {
+                    addNotificationLog(`[Trace F-107] Database successfully synchronized for ${normalized.name}`);
+                  })
+                  .catch(err => {
+                    console.error("Auto-sync back for F-107 failed:", err);
+                  });
+              }
+            }
+            
+            list.push(normalized);
           });
           list.sort((a, b) => a.id.localeCompare(b.id));
           setFacilities(list);
