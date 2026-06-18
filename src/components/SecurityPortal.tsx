@@ -25,10 +25,13 @@ export default function SecurityPortal({
     const permitVal = (f.permitStatus || '').toLowerCase();
     const approvalVal = (f.approvalStatus || '').toLowerCase();
     const onboardingVal = (f.onboardingStatus || '').toLowerCase();
-    return statusVal === 'approved' || 
-           permitVal === 'approved' || 
-           approvalVal === 'approved' || 
-           onboardingVal === 'approved';
+
+    const isApprovedOrActive = (v: string) => v === 'approved' || v === 'active';
+
+    return isApprovedOrActive(statusVal) || 
+           isApprovedOrActive(permitVal) || 
+           isApprovedOrActive(approvalVal) || 
+           isApprovedOrActive(onboardingVal);
   });
 
   // Login states
@@ -403,7 +406,7 @@ export default function SecurityPortal({
                     }
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="block w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 text-xs font-medium rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                    className="block w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 text-xs font-medium rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[...]"
                   />
                 </div>
               </div>
@@ -420,7 +423,7 @@ export default function SecurityPortal({
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 text-xs font-medium rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                    className="block w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 text-xs font-medium rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border[...]"
                   />
                   <button
                     type="button"
