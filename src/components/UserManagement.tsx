@@ -55,7 +55,7 @@ export default function UserManagement({
     setShowAddForm(false);
   };
 
-  const toggleStatus = (id: string, currentStatus: 'Active' | 'Suspended') => {
+  const toggleStatus = (id: string, currentStatus: 'Active' | 'Suspended' | 'Pending Approval' | 'Approved' | 'Rejected') => {
     const nextStatus = currentStatus === 'Active' ? 'Suspended' : 'Active';
     onUpdateUser(id, { status: nextStatus });
   };
@@ -125,7 +125,9 @@ export default function UserManagement({
                 className="w-full bg-slate-50 border border-slate-200 text-xs px-3 py-2.5 rounded-xl text-slate-800 focus:outline-none"
               >
                 <option value="public">Citizen Public</option>
-                <option value="staff">Facility Staff / Doctor</option>
+                <option value="staff">Employee / Staff</option>
+                <option value="hr_officer">HR Officer</option>
+                <option value="equipment_officer">Equipment & Supply Officer</option>
                 <option value="facility_admin">Facility Administrator</option>
                 <option value="super_admin">Central Super Admin</option>
               </select>
@@ -191,11 +193,14 @@ export default function UserManagement({
                 </td>
                 <td className="p-4">
                   <span className={`text-[8.5px] font-mono font-bold px-2 py-0.5 rounded border ${
-                    u.role === 'super_admin' ? 'bg-indigo-50 border-indigo-100 text-indigo-700' :
-                    u.role === 'facility_admin' ? 'bg-blue-5 border-blue-100 text-blue-700' :
-                    'bg-slate-50 border-slate-100 text-slate-600'
+                    u.role === 'super_admin' ? 'bg-[#e0e7ff] border-[#c7d2fe] text-[#3730a3]' :
+                    u.role === 'facility_admin' ? 'bg-[#dbeafe] border-[#bfdbfe] text-[#1e40af]' :
+                    u.role === 'hr_officer' ? 'bg-[#fef3c7] border-[#fde68a] text-[#78350f]' :
+                    u.role === 'equipment_officer' ? 'bg-[#f3e8ff] border-[#e9d5ff] text-[#6b21a8]' :
+                    u.role === 'staff' ? 'bg-[#ecfdf5] border-[#a7f3d0] text-[#065f46]' :
+                    'bg-[#f1f5f9] border-[#e2e8f0] text-[#334155]'
                   }`}>
-                    {u.role.toUpperCase()}
+                    {u.role === 'hr_officer' ? 'HR OFFICER' : u.role === 'equipment_officer' ? 'EQUIPMENT OFFICER' : u.role.replace('_', ' ').toUpperCase()}
                   </span>
                 </td>
                 <td className="p-4 text-slate-600">

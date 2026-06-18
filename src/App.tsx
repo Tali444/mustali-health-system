@@ -297,20 +297,40 @@ export default function App() {
 
         // 9. Users Directory
         const usrSnap = await getDocs(collection(db, 'users')).catch(err => handleFirestoreError(err, OperationType.GET, 'users'));
+        let userList: SystemUser[] = [];
         if (usrSnap.empty) {
           addNotificationLog("[Firebase] Seeding initial users directory...");
           for (const u of initialUsers) {
              await setDoc(doc(db, 'users', u.id), u).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${u.id}`));
           }
-          setUsers(initialUsers);
+          userList = [...initialUsers];
         } else {
-          const list: SystemUser[] = [];
           usrSnap.forEach(docSnap => {
-            list.push(docSnap.data() as SystemUser);
+            userList.push(docSnap.data() as SystemUser);
           });
-          list.sort((a, b) => a.id.localeCompare(b.id));
-          setUsers(list);
         }
+
+        // Ensure default Super Admin account exists if it is not already resolved in the database
+        const defaultAdminEmail = "admin@mustalihrmems.gov";
+        const hasDefaultAdmin = userList.some(u => u.email.toLowerCase() === defaultAdminEmail.toLowerCase());
+        if (!hasDefaultAdmin) {
+          const defaultAdmin: SystemUser = {
+            id: "USR-00",
+            email: defaultAdminEmail,
+            fullName: "Default Super Admin",
+            role: "super_admin",
+            facilityId: "all",
+            status: "Active",
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'users', defaultAdmin.id), defaultAdmin)
+            .catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${defaultAdmin.id}`));
+          userList.push(defaultAdmin);
+          addNotificationLog(`[Firebase] Default Super Admin account verified & registered: ${defaultAdminEmail}`);
+        }
+
+        userList.sort((a, b) => a.id.localeCompare(b.id));
+        setUsers(userList);
 
         // 10. Payroll Slips
         const pyrSnap = await getDocs(collection(db, 'payrollSlips')).catch(err => handleFirestoreError(err, OperationType.GET, 'payrollSlips'));
@@ -433,8 +453,9 @@ export default function App() {
   };
 
   const handleRegisterFacilityFromPortal = (fac: any) => {
+    const newFacId = `F-${101 + facilities.length}`;
     const newFac: TenantFacility = {
-      id: `F-${101 + facilities.length}`,
+      id: newFacId,
       name: fac.name,
       code: `PENDING-${Math.floor(10 + Math.random() * 90)}`,
       type: fac.type as any,
@@ -450,13 +471,33 @@ export default function App() {
       createdAt: new Date().toISOString(),
       patientsWaiting: 0,
       estimatedWaitMinutes: 0,
-      onCallDoctors: ['Dr. On-Call Registrar']
+      onCallDoctors: ['Dr. On-Call Registrar'],
+      adminName: fac.adminName,
+      adminEmail: fac.adminEmail,
+      adminPhone: fac.adminPhone,
+      adminPassword: fac.adminPassword,
     };
     
     setFacilities(prev => [...prev, newFac]);
     if (!isOffline) {
       setDoc(doc(db, 'facilities', newFac.id), newFac)
         .catch(err => handleFirestoreError(err, OperationType.CREATE, `facilities/${newFac.id}`));
+    }
+
+    // Auto-create pending SystemUser account for Facility Administrator
+    const newAdminUser: SystemUser = {
+      id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
+      email: fac.adminEmail,
+      fullName: fac.adminName,
+      role: 'facility_admin',
+      facilityId: newFacId,
+      status: 'Pending Approval',
+      createdAt: new Date().toISOString()
+    };
+    setUsers(prev => [...prev, newAdminUser]);
+    if (!isOffline) {
+      setDoc(doc(db, 'users', newAdminUser.id), newAdminUser)
+        .catch(err => handleFirestoreError(err, OperationType.CREATE, `users/${newAdminUser.id}`));
     }
     
     const newLog: AuditLog = {
@@ -465,7 +506,7 @@ export default function App() {
       user: 'Facility Applicant',
       role: 'Citizen',
       action: 'TENANT_REGISTER',
-      details: `New facility registered: ${fac.name} under security license ${fac.licenseNo}. Boundary coordinates: ${fac.lat}, ${fac.lng}`,
+      details: `New facility registered: ${fac.name} under license ${fac.licenseNo} by Admin: ${fac.adminName} (${fac.adminEmail}). Status locked to Pending Approval.`,
       ip: '127.0.0.1'
     };
     setAuditLogs(prev => [newLog, ...prev]);
@@ -473,6 +514,38 @@ export default function App() {
       setDoc(doc(db, 'auditLogs', newLog.id), newLog)
         .catch(err => handleFirestoreError(err, OperationType.CREATE, `auditLogs/${newLog.id}`));
     }
+  };
+
+  const handleRegisterCitizenFromPortal = (fullName: string, email: string) => {
+    const newUser: SystemUser = {
+      id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
+      email: email,
+      fullName: fullName,
+      role: 'public',
+      facilityId: 'none',
+      status: 'Active',
+      createdAt: new Date().toISOString()
+    };
+    setUsers(prev => [...prev, newUser]);
+    
+    const newLog: AuditLog = {
+      id: `AUD-${Math.floor(10000 + Math.random() * 90000)}`,
+      timestamp: new Date().toISOString(),
+      user: fullName,
+      role: 'Citizen',
+      action: 'CITIZEN_SELF_REGISTER',
+      details: `Public Citizen signed up independently: ${fullName} (${email}). Profile active immediately.`,
+      ip: '127.0.0.1'
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+    
+    if (!isOffline) {
+      setDoc(doc(db, 'users', newUser.id), newUser)
+        .catch(err => handleFirestoreError(err, OperationType.CREATE, `users/${newUser.id}`));
+      setDoc(doc(db, 'auditLogs', newLog.id), newLog)
+        .catch(err => handleFirestoreError(err, OperationType.CREATE, `auditLogs/${newLog.id}`));
+    }
+    addNotificationLog(`[Citizen Self-Register] Active account successfully provisioned for ${fullName} (${email}).`);
   };
 
   const handleCreateUser = (newUserFields: Omit<SystemUser, 'id' | 'createdAt'>) => {
@@ -509,31 +582,93 @@ export default function App() {
 
   // Multi-tenant: Tenant Approvals and Activations (Super Admin Action)
   const approveFacility = (id: string) => {
+    let targetFac: TenantFacility | undefined;
+
     setFacilities(prev => {
-      const updated = prev.map(f => (f.id === id ? { ...f, status: 'approved', code: `${f.type.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}` } : f));
-      if (!isOffline) {
-        const targetFac = updated.find(f => f.id === id);
-        if (targetFac) {
-          setDoc(doc(db, 'facilities', id), targetFac)
-            .catch(err => handleFirestoreError(err, OperationType.UPDATE, `facilities/${id}`));
+      const updated = prev.map(f => {
+        if (f.id === id) {
+          targetFac = { ...f, status: 'approved', code: `${f.type.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}` };
+          return targetFac;
         }
+        return f;
+      });
+
+      if (!isOffline && targetFac) {
+        setDoc(doc(db, 'facilities', id), targetFac)
+          .catch(err => handleFirestoreError(err, OperationType.UPDATE, `facilities/${id}`));
       }
       return updated;
     });
+
+    // Update corresponding admin users status to Active
+    setUsers(prev => {
+      const updatedUsers = prev.map(u => {
+        if (u.facilityId === id) {
+          const updatedUser: SystemUser = { ...u, status: 'Active' };
+          if (!isOffline) {
+            setDoc(doc(db, 'users', u.id), updatedUser)
+              .catch(err => handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`));
+          }
+          return updatedUser;
+        }
+        return u;
+      });
+      return updatedUsers;
+    });
+
+    // Send email notification log
+    setTimeout(() => {
+      const fac = facilities.find(f => f.id === id) || targetFac;
+      if (fac) {
+        const destEmail = fac.adminEmail || fac.email;
+        addNotificationLog(`[EMAIL SENT] To: ${destEmail} | SUBJECT: Onboarding status: Approved | Message: Congratulations! Your MUSTALI DIRS registration for ${fac.name} has been approved. Your Admin account "${destEmail}" is now active and can sign in.`);
+      }
+    }, 200);
   };
 
   const rejectFacility = (id: string) => {
+    let targetFac: TenantFacility | undefined;
+
     setFacilities(prev => {
-      const updated = prev.map(f => (f.id === id ? { ...f, status: 'rejected' } : f));
-      if (!isOffline) {
-        const targetFac = updated.find(f => f.id === id);
-        if (targetFac) {
-          setDoc(doc(db, 'facilities', id), targetFac)
-            .catch(err => handleFirestoreError(err, OperationType.UPDATE, `facilities/${id}`));
+      const updated = prev.map(f => {
+        if (f.id === id) {
+          targetFac = { ...f, status: 'rejected' };
+          return targetFac;
         }
+        return f;
+      });
+
+      if (!isOffline && targetFac) {
+        setDoc(doc(db, 'facilities', id), targetFac)
+          .catch(err => handleFirestoreError(err, OperationType.UPDATE, `facilities/${id}`));
       }
       return updated;
     });
+
+    // Update corresponding admin users status to Rejected
+    setUsers(prev => {
+      const updatedUsers = prev.map(u => {
+        if (u.facilityId === id) {
+          const updatedUser: SystemUser = { ...u, status: 'Rejected' };
+          if (!isOffline) {
+            setDoc(doc(db, 'users', u.id), updatedUser)
+              .catch(err => handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`));
+          }
+          return updatedUser;
+        }
+        return u;
+      });
+      return updatedUsers;
+    });
+
+    // Send email notification log
+    setTimeout(() => {
+      const fac = facilities.find(f => f.id === id) || targetFac;
+      if (fac) {
+        const destEmail = fac.adminEmail || fac.email;
+        addNotificationLog(`[EMAIL SENT] To: ${destEmail} | SUBJECT: Onboarding status: Declined | Message: We regret to inform you that your MUSTALI DIRS request for ${fac.name} has been declined. Access to the environment remains blocked.`);
+      }
+    }, 200);
   };
 
   const handleAddNewFacility = (newFac: TenantFacility) => {
@@ -661,6 +796,22 @@ export default function App() {
 
   // HRMS: Adding new employees
   const addNewEmployee = (newEmp: Employee) => {
+    // Determine system authorization role
+    const chosenRole: UserRole = newEmp.systemRole === 'HR Officer' ? 'facility_admin' : 'staff';
+    
+    // Auto-create active SystemUser credential mapping
+    const newSystemUser: SystemUser = {
+      id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
+      email: newEmp.email,
+      fullName: newEmp.fullName,
+      role: chosenRole,
+      facilityId: newEmp.facilityId,
+      status: 'Active',
+      createdAt: new Date().toISOString()
+    };
+    
+    setUsers(prev => [...prev, newSystemUser]);
+
     if (isOffline) {
       // Add to simulated local IndexedDB sync queue
       const queueItem: OfflineSyncQueueItem = {
@@ -670,14 +821,16 @@ export default function App() {
         timestamp: new Date().toISOString()
       };
       setSyncQueue(prev => [...prev, queueItem]);
-      addNotificationLog(`[Offline Mode] Employee registrars cached locally in IndexedDB.`);
+      addNotificationLog(`[Offline Mode] Employee records cached locally in IndexedDB.`);
     } else {
       setEmployees(prev => [...prev, newEmp]);
       setDoc(doc(db, 'employees', newEmp.id), newEmp)
         .catch(err => handleFirestoreError(err, OperationType.CREATE, `employees/${newEmp.id}`));
       setDoc(doc(db, 'staff', newEmp.id), newEmp)
         .catch(err => handleFirestoreError(err, OperationType.CREATE, `staff/${newEmp.id}`));
-      addNotificationLog(`[SMS Gateway] Dispatched welcome text message to brand new employee: ${newEmp.fullName}`);
+      setDoc(doc(db, 'users', newSystemUser.id), newSystemUser)
+        .catch(err => handleFirestoreError(err, OperationType.CREATE, `users/${newSystemUser.id}`));
+      addNotificationLog(`[SMS Gateway] Welcome message and credential activation SMS dispatched to ${newEmp.fullName} (${newEmp.email})`);
     }
   };
 
@@ -1089,7 +1242,9 @@ export default function App() {
         <SecurityPortal
           onLogin={handleLoginFromPortal}
           onRegisterFacility={handleRegisterFacilityFromPortal}
+          onRegisterCitizen={handleRegisterCitizenFromPortal}
           facilities={facilities}
+          users={users}
         />
       </div>
     );
@@ -1485,24 +1640,28 @@ export default function App() {
             </>
           )}
 
-          <div className="p-4 uppercase text-[9px] font-extrabold tracking-widest text-slate-500 mt-2">
-            System Settings
-          </div>
-          <button
-            id="btn-nav-view-settings"
-            onClick={() => {
-              setActiveView('settings_admin');
-              setShowTechSpecs(false);
-              setShowMobileSim(false);
-            }}
-            className={`flex items-center gap-2.5 px-4 py-2.5 transition text-left font-semibold ${
-              activeView === 'settings_admin' && !showTechSpecs && !showMobileSim
-                ? 'bg-blue-600 text-white font-semibold shadow-inner border-r-4 border-blue-400'
-                : 'hover:bg-slate-800 hover:text-white text-slate-400'
-            }`}
-          >
-            <span>⚙️</span> Portal Settings
-          </button>
+          {activeRole !== 'public' && (
+            <>
+              <div className="p-4 uppercase text-[9px] font-extrabold tracking-widest text-slate-500 mt-2">
+                System Settings
+              </div>
+              <button
+                id="btn-nav-view-settings"
+                onClick={() => {
+                  setActiveView('settings_admin');
+                  setShowTechSpecs(false);
+                  setShowMobileSim(false);
+                }}
+                className={`flex items-center gap-2.5 px-4 py-2.5 transition text-left font-semibold ${
+                  activeView === 'settings_admin' && !showTechSpecs && !showMobileSim
+                    ? 'bg-blue-600 text-white font-semibold shadow-inner border-r-4 border-blue-400'
+                    : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                }`}
+              >
+                <span>⚙️</span> Portal Settings
+              </button>
+            </>
+          )}
 
           {activeRole === 'super_admin' && (
             <>
@@ -1780,6 +1939,11 @@ export default function App() {
                     rejectFacility={rejectFacility}
                     auditLogs={auditLogs}
                     addNewAudit={addNewAudit}
+                    employees={employees}
+                    equipment={equipment}
+                    users={users}
+                    setUsers={setUsers}
+                    setFacilities={setFacilities}
                   />
                 </div>
               )}

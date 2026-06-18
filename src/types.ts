@@ -5,7 +5,7 @@
 
 export type Language = 'en' | 'om';
 
-export type UserRole = 'super_admin' | 'facility_admin' | 'staff' | 'public';
+export type UserRole = 'super_admin' | 'facility_admin' | 'hr_officer' | 'equipment_officer' | 'staff' | 'public';
 
 export interface TenantFacility {
   id: string;
@@ -20,11 +20,15 @@ export interface TenantFacility {
   gps: { lat: number; lng: number };
   phone: string;
   email: string;
-  status: 'draft' | 'pending' | 'submitted' | 'under_review' | 'approved' | 'rejected';
+  status: 'draft' | 'pending' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'Pending Approval' | 'Approved' | 'Active' | 'Rejected' | 'Suspended';
   createdAt: string;
   patientsWaiting: number;
   estimatedWaitMinutes: number;
   onCallDoctors: string[];
+  adminName?: string;
+  adminEmail?: string;
+  adminPhone?: string;
+  adminPassword?: string;
 }
 
 export interface TrainingRecord {
@@ -91,6 +95,7 @@ export interface Employee {
     excused: number;
     overtimeHours: number;
   };
+  systemRole?: 'Doctor' | 'HR Officer' | 'Store Keeper' | 'Staff';
   salaryStructure?: {
     grade: string;
     housingAllowance: number;
@@ -269,7 +274,7 @@ export interface SystemUser {
   fullName: string;
   role: UserRole;
   facilityId: string;
-  status: 'Active' | 'Suspended';
+  status: 'Active' | 'Suspended' | 'Pending Approval' | 'Approved' | 'Rejected';
   createdAt: string;
 }
 

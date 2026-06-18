@@ -893,6 +893,15 @@ export const staffRouteHistories: StaffRouteHistory[] = [
 
 export const initialUsers: SystemUser[] = [
   {
+    id: "USR-00",
+    email: "admin@mustalihrmems.gov",
+    fullName: "Default Super Admin",
+    role: "super_admin",
+    facilityId: "all",
+    status: "Active",
+    createdAt: "2026-06-18T08:00:00Z"
+  },
+  {
     id: "USR-01",
     email: "abdisa.wakuma@health.go.et",
     fullName: "Abdisa Wakuma",

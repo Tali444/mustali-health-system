@@ -82,6 +82,7 @@ export default function StaffManagement({
   const [formEmail, setFormEmail] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formProfession, setFormProfession] = useState('Medical Doctor');
+  const [formSystemRole, setFormSystemRole] = useState<'Doctor' | 'HR Officer' | 'Store Keeper' | 'Staff'>('Staff');
   const [formEducation, setFormEducation] = useState('MD in General Medicine');
   const [formDepartment, setFormDepartment] = useState('Emergency & General Medicine');
   const [formPosition, setFormPosition] = useState('Consultant Doctor');
@@ -255,11 +256,12 @@ export default function StaffManagement({
         late: 0,
         excused: 0,
         overtimeHours: 0
-      }
+      },
+      systemRole: formSystemRole
     };
 
     addNewEmployee(newEmp);
-    addNewAudit('STAFF_REGISTRATION', `Credentialed clinical staff: ${formName} (${formProfession}) under ID: ${nextId}. Associated with Facility: ${formFacilityId}`);
+    addNewAudit('STAFF_REGISTRATION', `Credentialed clinical staff: ${formName} (${formProfession}) with system role ${formSystemRole} under ID: ${nextId}. Associated with Facility: ${formFacilityId}`);
     
     // Reset Form Input
     setFormName('');
@@ -267,6 +269,7 @@ export default function StaffManagement({
     setFormEmail('');
     setFormAddress('');
     setFormSalary('');
+    setFormSystemRole('Staff');
     
     setSuccessMsg(`${t.msgRegSuccess} Key card assigned: ${nextId}`);
     setErrorMsg('');
@@ -872,6 +875,20 @@ export default function StaffManagement({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">System Access Role</label>
+                  <select
+                    id="reg-system-role"
+                    value={formSystemRole}
+                    onChange={(e) => setFormSystemRole(e.target.value as any)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-xs focus:outline-none text-slate-700 font-semibold"
+                  >
+                    <option value="Doctor">Doctor (Staff Role)</option>
+                    <option value="HR Officer">HR Officer (Facility Admin Role)</option>
+                    <option value="Store Keeper">Store Keeper (Staff Role)</option>
+                    <option value="Staff">Staff (Staff Role)</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">{t.lblProfession}</label>
                   <select
                     id="reg-profession"
@@ -887,8 +904,11 @@ export default function StaffManagement({
                     <option value="HR Administrator">Administrative Staff</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">{t.lblDepartment}</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Clinical / Admin Department</label>
                   <select
                     id="reg-department"
                     value={formDepartment}
