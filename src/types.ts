@@ -5,7 +5,7 @@
 
 export type Language = 'en' | 'om';
 
-export type UserRole = 'super_admin' | 'facility_admin' | 'hr_officer' | 'equipment_officer' | 'staff' | 'public';
+export type UserRole = 'super_admin' | 'facility_warden' | 'facility_doctor' | 'hr_officer' | 'equipment_officer' | 'staff' | 'public';
 
 export interface TenantFacility {
   id: string;
@@ -277,8 +277,17 @@ export interface SystemUser {
   fullName: string;
   role: UserRole;
   facilityId: string;
-  status: 'Active' | 'Suspended' | 'Pending Approval' | 'Approved' | 'Rejected';
+  status: 'Active' | 'Suspended' | 'Pending Approval' | 'Approved' | 'Rejected' | 'Pending OTP Verification' | 'Pending Acceptance';
   createdAt: string;
+  // OTP verification fields
+  otpVerified?: boolean;
+  otpVerificationMethod?: 'email' | 'sms' | 'telegram';
+  otpVerificationDate?: string;
+  // Doctor invitation fields
+  invitedBy?: string;
+  invitationToken?: string;
+  tempPassword?: string;
+  invitationAcceptedAt?: string;
 }
 
 export interface VaccineStock {
@@ -294,4 +303,3 @@ export interface VaccineStock {
   threshold: number;
   lastUpdated: string;
 }
-
